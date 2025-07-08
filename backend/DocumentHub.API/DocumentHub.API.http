@@ -1,0 +1,6 @@
+@DocumentHub.API_HostAddress = http://localhost:5272
+
+GET {{DocumentHub.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
