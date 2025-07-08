@@ -20,9 +20,9 @@ public class BlobStorageService : IBlobStorageService
 
     public BlobStorageService(IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("BlobStorage");
+        var connectionString = configuration.GetConnectionString("BlobStorage_ConnectionString");
         _blobServiceClient = new BlobServiceClient(connectionString);
-        _containerName = configuration["BlobStorage:ContainerName"] ?? "documents";
+        _containerName = configuration["BlobStorage:ContainerName"] ?? "newdocument";
     }
 
     public async Task<string> UploadFileAsync(IFormFile file, string fileName)

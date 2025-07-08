@@ -5,9 +5,21 @@ using DocHub.Api.Services;
 using DocHub.Api.Hubs;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.ResponseCompression;
+using DotNetEnv;
+
+DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -728,7 +740,7 @@ app.MapPost("/api/test-signalr", async (IDocumentNotificationService notificatio
 
 // Map SignalR Hub
 app.MapHub<DocumentHub>("/documentHub");
-
+app.UseCors("AllowAll");
 app.Run();
 
 // Helper method for DOCX to HTML conversion
