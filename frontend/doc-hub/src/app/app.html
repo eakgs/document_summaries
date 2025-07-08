@@ -1,0 +1,537 @@
+<div class="app">
+  <!-- Material Toolbar -->
+  <mat-toolbar color="primary" class="header">
+    <button mat-icon-button class="menu-toggle" aria-label="Toggle navigation menu">
+      <mat-icon aria-label="Menu">menu</mat-icon>
+    </button>
+
+    <div class="brand">
+      <mat-icon aria-label="Document Hub">auto_stories</mat-icon>
+      <span>Document Hub</span>
+    </div>
+
+    <span class="flex-spacer"></span>
+
+    <div class="toolbar-actions">
+      <div class="doc-count">
+        <mat-icon aria-label="Document count">folder</mat-icon>
+        <span>{{ documents.length }} Docs</span>
+      </div>
+
+      <mat-slide-toggle
+        [checked]="autoRefresh"
+        (change)="toggleAutoRefresh()"
+        aria-label="Toggle auto-refresh">
+        Auto-refresh
+      </mat-slide-toggle>
+
+      <button mat-icon-button
+        [class.connected]="signalRConnected"
+        [class.disconnected]="!signalRConnected"
+        [matTooltip]="signalRConnected ? 'Real-time Connected' : 'Offline'"
+        aria-label="Real-time connection status">
+        <mat-icon aria-label="Connection status">{{ signalRConnected ? 'check_circle' : 'error' }}</mat-icon>
+      </button>
+
+      <button mat-icon-button aria-label="User profile">
+        <mat-icon aria-label="User account">account_circle</mat-icon>
+      </button>
+    </div>
+  </mat-toolbar>
+
+  <div class="main-content">
+    <!-- Upload Section -->
+    <section class="upload-section">
+      <div class="section-header">
+        <div>
+          <h2>
+            <mat-icon aria-label="Upload" class="section-icon">upload</mat-icon>
+            Upload New Document
+          </h2>
+          <p>Drag & drop files or click to browse (PDF, DOCX, TXT, JPG, PNG - Max 10MB)</p>
+        </div>
+      </div>
+
+      <div class="upload-container">
+        <div 
+          class="upload-zone"
+          [class.drag-over]="isDragOver"
+          [class.has-file]="selectedFile"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+          (click)="fileInput.click()">
+          
+          <!-- No file selected -->
+          <div *ngIf="!selectedFile" class="upload-placeholder">
+            <div class="upload-icon">📁</div>
+            <h3>Drop files here or click to browse</h3>
+            <p class="upload-hint">Supported: PDF, DOCX, TXT, JPG, PNG</p>
+          </div>
+
+          <!-- File selected -->
+          <div *ngIf="selectedFile" class="file-preview">
+            <div class="file-icon">📄</div>
+            <div class="file-info">
+              <h4>{{ selectedFile.name }}</h4>
+              <p>{{ formatFileSize(selectedFile.size) }}</p>
+            </div>
+            <button class="remove-btn" (click)="removeFile(); $event.stopPropagation()">❌</button>
+          </div>
+
+          <input 
+            #fileInput 
+            type="file" 
+            (change)="onFileSelected($event)"
+            accept=".pdf,.docx,.txt,.jpg,.png,.jpeg"
+            style="display: none;">
+        </div>
+
+        <!-- Upload Actions -->
+        <div class="upload-actions">
+          <button 
+            mat-raised-button
+            color="primary"
+            class="upload-btn"
+            (click)="uploadFile()"
+            [disabled]="!selectedFile || uploading">
+            <mat-icon aria-label="Upload">{{ uploading ? 'hourglass_empty' : 'cloud_upload' }}</mat-icon>
+            {{ uploading ? 'Uploading...' : 'Upload Document' }}
+          </button>
+          <button 
+            mat-button
+            class="clear-btn"
+            (click)="removeFile()"
+            [disabled]="!selectedFile || uploading">
+            <mat-icon aria-label="Clear">delete</mat-icon>
+            Clear
+          </button>
+        </div>
+
+        <!-- Upload Progress -->
+        <div *ngIf="uploading" class="upload-progress">
+          <div class="progress-bar">
+            <div class="progress-fill"></div>
+          </div>
+          <p>Uploading {{ selectedFile?.name }}... Please wait</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Documents Section -->
+    <section class="documents-section">
+      <div class="section-header">
+        <div>
+          <h2>
+            <mat-icon aria-label="Documents" class="section-icon">description</mat-icon>
+            Your Documents
+          </h2>
+        </div>
+        <div class="section-actions">
+          <button mat-button class="refresh-btn" (click)="loadDocuments()" [disabled]="loading">
+            <mat-icon aria-label="Refresh">{{ loading ? 'hourglass_empty' : 'refresh' }}</mat-icon>
+            Refresh
+          </button>
+          <mat-slide-toggle
+            [(ngModel)]="autoRefresh"
+            (change)="toggleAutoRefresh()"
+            aria-label="Toggle auto-refresh">
+            Auto-refresh
+          </mat-slide-toggle>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading documents...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!loading && documents.length === 0" class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>No documents found</h3>
+        <p>Upload your first document to get started!</p>
+      </div>
+
+      <!-- Documents Table -->
+      <div *ngIf="!loading && documents.length > 0" class="documents-table">
+        <!-- Desktop Table Header -->
+        <div class="table-header">
+          <div class="col-num">#</div>
+          <div class="col-name">Document Name</div>
+          <div class="col-summary">Summary Status</div>
+          <div class="col-uploaded">Uploaded</div>
+          <div class="col-actions">Actions</div>
+        </div>
+
+        <div class="table-body">
+          <div 
+            *ngFor="let doc of paginatedDocuments; let i = index" 
+            class="table-row"
+            [class.processing]="!doc.isSummaryDone"
+            [class.deleting]="isDeleting(doc.id)">
+            
+            <!-- Document Number -->
+            <div class="col-num">{{ (currentPage - 1) * pageSize + i + 1 }}</div>
+            
+            <!-- Document Name -->
+            <div class="col-name">
+              <mat-icon aria-label="Document type" class="file-icon">
+                {{ getFileTypeIcon(doc.fileName) }}
+              </mat-icon>
+              <span class="file-name">{{ doc.fileName }}</span>
+              <span *ngIf="isDeleting(doc.id)" class="deleting-indicator">
+                <mat-icon aria-label="Deleting">delete</mat-icon>
+                Deleting...
+              </span>
+            </div>
+            
+            <!-- Summary Status -->
+            <div class="col-summary">
+              <span class="status-badge" [class]="doc.isSummaryDone ? 'status-ready' : 'status-processing'">
+                <mat-icon aria-label="Summary status">
+                  {{ doc.isSummaryDone ? 'check_circle' : 'hourglass_empty' }}
+                </mat-icon>
+                {{ doc.isSummaryDone ? 'Ready' : 'Processing' }}
+              </span>
+            </div>
+            
+            <!-- Upload Info -->
+            <div class="col-uploaded">
+              <div class="date-info">
+                <span class="date">{{ formatDate(doc.uploadedUtc) }}</span>
+                <span class="user">by {{ doc.uploadedBy }}</span>
+              </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="col-actions">
+              <button mat-icon-button
+                class="action-btn view-document-btn"
+                [disabled]="isDeleting(doc.id) || !canPreviewDocument(doc)"
+                (click)="openDocumentViewer(doc)"
+                [matTooltip]="canPreviewDocument(doc) ? 'View document content' : 'Preview not available for this file type'"
+                [attr.aria-label]="'View document content for ' + doc.fileName">
+                <mat-icon>{{ canPreviewDocument(doc) ? 'visibility' : 'description' }}</mat-icon>
+              </button>
+              
+              <button mat-icon-button
+                class="action-btn view-btn"
+                [disabled]="!doc.isSummaryDone || isDeleting(doc.id)"
+                (click)="viewDocument(doc)"
+                [matTooltip]="doc.isSummaryDone ? 'View AI summary' : 'Summary not ready'"
+                [attr.aria-label]="'View AI summary for ' + doc.fileName">
+                <mat-icon>{{ doc.isSummaryDone ? 'summarize' : 'hourglass_empty' }}</mat-icon>
+              </button>
+              
+              <button mat-icon-button
+                class="action-btn download-btn"
+                [disabled]="isDownloading(doc.id) || isDeleting(doc.id)"
+                (click)="downloadDocument(doc)"
+                [matTooltip]="isDownloading(doc.id) ? 'Downloading...' : 'Download original file'"
+                [attr.aria-label]="'Download original file ' + doc.fileName">
+                <mat-icon>{{ isDownloading(doc.id) ? 'hourglass_empty' : 'download' }}</mat-icon>
+              </button>
+              
+              <button mat-icon-button
+                class="action-btn delete-btn"
+                [disabled]="isDeleting(doc.id)"
+                (click)="deleteDocument(doc)"
+                [matTooltip]="isDeleting(doc.id) ? 'Deleting...' : 'Delete document'"
+                [attr.aria-label]="'Delete document ' + doc.fileName">
+                <mat-icon>{{ isDeleting(doc.id) ? 'hourglass_empty' : 'delete' }}</mat-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" *ngIf="documents.length > pageSize">
+          <span class="page-info">
+            Page {{ currentPage }} of {{ totalPages }} 
+            ({{ documents.length }} total documents)
+          </span>
+          
+          <button mat-button
+            class="page-btn"
+            (click)="previousPage()"
+            [disabled]="currentPage === 1"
+            aria-label="Go to previous page">
+            <mat-icon>chevron_left</mat-icon>
+            Previous
+          </button>
+          
+          <button mat-button
+            class="page-btn"
+            (click)="nextPage()"
+            [disabled]="currentPage === totalPages"
+            aria-label="Go to next page">
+            Next
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- AI Summary View Modal -->
+  <div *ngIf="showDocumentModal && selectedDocumentForView" 
+       class="modal-overlay" 
+       (click)="closeDocumentModal()">
+    
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="modal-title">
+          <mat-icon aria-label="Document type" class="file-icon">
+            {{ getFileTypeIcon(selectedDocumentForView.fileName) }}
+          </mat-icon>
+          <h3>{{ selectedDocumentForView.fileName }}</h3>
+        </div>
+        <button mat-icon-button class="modal-close" (click)="closeDocumentModal()" aria-label="Close modal">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- Document Info -->
+        <div class="document-info">
+          <div class="info-row">
+            <span class="label">
+              <mat-icon aria-label="Upload date">calendar_today</mat-icon>
+              Uploaded:
+            </span>
+            <span class="value">{{ formatDate(selectedDocumentForView.uploadedUtc) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">
+              <mat-icon aria-label="Uploaded by">person</mat-icon>
+              By:
+            </span>
+            <span class="value">{{ selectedDocumentForView.uploadedBy }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">
+              <mat-icon aria-label="Status">analytics</mat-icon>
+              Status:
+            </span>
+            <span class="value status-ready">
+              <mat-icon aria-label="Ready">check_circle</mat-icon>
+              AI Summary Ready
+            </span>
+          </div>
+        </div>
+
+        <!-- AI Summary -->
+        <div class="summary-section">
+          <h4>
+            <mat-icon aria-label="AI Summary">smart_toy</mat-icon>
+            AI Generated Summary
+          </h4>
+          <div class="summary-content">
+            {{ selectedDocumentForView.summary || selectedDocumentForView.summaryPreview || 'No summary available' }}
+          </div>
+        </div>
+
+        <!-- Download Options Info -->
+        <div class="download-info">
+          <div class="info-box">
+            <h5>
+              <mat-icon aria-label="Download options">download</mat-icon>
+              Download Options Available:
+            </h5>
+            <ul>
+              <li>
+                <mat-icon aria-label="Summary">summarize</mat-icon>
+                <strong>AI Summary:</strong> Download this AI-generated summary as a text file
+              </li>
+              <li>
+                <mat-icon aria-label="Original file">description</mat-icon>
+                <strong>Original File:</strong> Use the dashboard button to download the original document
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <p class="quick-tip">
+            <mat-icon aria-label="Tip">lightbulb</mat-icon>
+            <strong>Tip:</strong> Use Ctrl+D (or Cmd+D) to quickly download the AI summary
+          </p>
+        </div>
+      </div>
+
+      <!-- Modal Footer with AI Summary Download -->
+      <div class="modal-footer">
+        <button mat-button class="modal-btn secondary" (click)="closeDocumentModal()">
+          Close
+        </button>
+        <button mat-raised-button
+          color="primary"
+          class="modal-btn primary summary-download-btn"
+          [disabled]="isDownloadingSummary(selectedDocumentForView.id)"
+          (click)="downloadSummaryFromModal()"
+          [matTooltip]="'Download AI summary as text file'">
+          <mat-icon aria-label="Download summary">
+            {{ isDownloadingSummary(selectedDocumentForView.id) ? 'hourglass_empty' : 'download' }}
+          </mat-icon>
+          {{ isDownloadingSummary(selectedDocumentForView.id) ? 'Downloading Summary...' : 'Download AI Summary' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Document Viewer Modal -->
+  <div *ngIf="showViewerModal && selectedDocumentForViewer" 
+       class="modal-overlay viewer-modal-overlay" 
+       (click)="closeViewer()">
+    
+    <div class="modal-content viewer-modal-content" (click)="$event.stopPropagation()">
+      <!-- Viewer Header -->
+      <div class="modal-header">
+        <div class="modal-title">
+          <mat-icon aria-label="Document type" class="file-icon">
+            {{ viewerType === 'pdf' ? 'picture_as_pdf' : 
+               viewerType === 'docx' ? 'article' : 
+               viewerType === 'image' ? 'image' : 
+               viewerType === 'text' ? 'text_snippet' : 'description' }}
+          </mat-icon>
+          <h3>{{ selectedDocumentForViewer.fileName }}</h3>
+          <span class="viewer-type-badge">{{ viewerType.toUpperCase() }} Viewer</span>
+        </div>
+        <button mat-icon-button class="modal-close" (click)="closeViewer()" aria-label="Close viewer">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <!-- Viewer Body -->
+      <div class="modal-body viewer-body">
+        <!-- Loading State -->
+        <div *ngIf="viewerLoading" class="viewer-loading">
+          <mat-progress-spinner mode="indeterminate"></mat-progress-spinner>
+          <p>Loading document preview...</p>
+        </div>
+
+        <!-- PDF Viewer -->
+        <div *ngIf="!viewerLoading && !hasViewerError && viewerType === 'pdf'" class="pdf-viewer-container">
+          <iframe 
+            [src]="safeDocumentUrl" 
+            style="width: 100%; height: 600px; border: none;"
+            title="PDF Viewer">
+          </iframe>
+          <div class="pdf-fallback" style="margin-top: 10px; text-align: center;">
+            <button class="modal-btn" (click)="openPdfInNewTab()">🔗 View PDF in New Tab</button>
+            <span class="pdf-hint" style="display:block; margin-top:4px; color:#888; font-size:0.95em;">
+              If the preview does not work, use the button above.
+            </span>
+          </div>
+        </div>
+
+        <!-- DOCX Viewer -->
+        <div *ngIf="!viewerLoading && !hasViewerError && viewerType === 'docx'" class="docx-viewer-container">
+          <iframe 
+            [src]="safeDocumentUrl" 
+            style="width: 100%; height: 600px; border: none; background: white;"
+            title="DOCX Viewer">
+          </iframe>
+          <div class="docx-actions" style="margin-top: 10px; text-align: center;">
+            <button class="modal-btn secondary" (click)="openDocxInNewTab()">
+              🔗 View DOCX in New Tab
+            </button>
+            <span class="docx-hint" style="display:block; margin-top:4px; color:#888; font-size:0.95em;">
+              For full formatting and editing, download the original DOCX file.
+            </span>
+          </div>
+        </div>
+
+        <!-- COMPLETE: Image Viewer with "View in New Tab" Button -->
+        <div *ngIf="!viewerLoading && !hasViewerError && viewerType === 'image'" class="image-viewer-container">
+          <img 
+            [src]="documentUrl" 
+            [alt]="selectedDocumentForViewer.fileName"
+            class="document-image"
+            style="max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+            (load)="onImageLoad()"
+            (error)="onImageError()">
+          
+          <!-- NEW: Image Actions Section with "View in New Tab" -->
+          <div class="image-actions" style="margin-top: 15px; text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+            <button class="modal-btn secondary" (click)="openImageInNewTab()" style="margin: 0 5px;">
+              🔗 View Image in New Tab
+            </button>
+            <span class="image-hint" style="display:block; margin-top:6px; color:#666; font-size:0.9em; font-style: italic;">
+              Opens the full-size image in a new browser tab for better viewing and zoom capabilities.
+            </span>
+          </div>
+        </div>
+
+        <!-- Text File Viewer -->
+        <div *ngIf="!viewerLoading && !hasViewerError && viewerType === 'text'" class="text-viewer-container">
+          <pre class="text-content" style="background: #f8f9fa; padding: 20px; border-radius: 6px; max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;">{{ documentContent }}</pre>
+        </div>
+
+        <!-- Error or Unsupported File Type -->
+        <div *ngIf="!viewerLoading && (hasViewerError || viewerType === 'unsupported')" class="unsupported-viewer">
+          <mat-icon aria-label="Warning" class="unsupported-icon">
+            {{ hasViewerError ? 'warning' : 'description' }}
+          </mat-icon>
+          <h4>
+            {{ hasViewerError ? 'Preview Failed' : 'Preview Not Available' }}
+          </h4>
+          <p>
+            {{ hasViewerError ? 'There was an error loading the preview.' : 'This file type cannot be previewed in the browser.' }}
+          </p>
+          <p>
+            File type: <strong>{{ getFileExtension(selectedDocumentForViewer.fileName) }}</strong>
+          </p>
+          <button mat-raised-button color="primary" (click)="downloadDocument(selectedDocumentForViewer)">
+            <mat-icon>download</mat-icon>
+            Download to View
+          </button>
+        </div>
+      </div>
+
+      <!-- Viewer Footer -->
+      <div class="modal-footer">
+        <button mat-button class="modal-btn secondary" (click)="closeViewer()">
+          <mat-icon>close</mat-icon>
+          Close Viewer
+        </button>
+        <button mat-raised-button
+          color="primary"
+          class="modal-btn primary"
+          (click)="downloadDocument(selectedDocumentForViewer)"
+          [disabled]="isDownloading(selectedDocumentForViewer.id)">
+          <mat-icon>
+            {{ isDownloading(selectedDocumentForViewer.id) ? 'hourglass_empty' : 'download' }}
+          </mat-icon>
+          {{ isDownloading(selectedDocumentForViewer.id) ? 'Downloading...' : 'Download Original' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications -->
+  <div *ngIf="notification" 
+       class="notification"
+       [class]="'notification-' + notification.type"
+       role="alert"
+       [attr.aria-live]="notification.type === 'error' ? 'assertive' : 'polite'">
+    <mat-icon aria-label="Notification type" class="notification-icon">
+      {{ notification.type === 'success' ? 'check_circle' : 
+         notification.type === 'error' ? 'error' : 'info' }}
+    </mat-icon>
+    <span class="notification-message">
+      {{ notification.message }}
+    </span>
+    <button mat-icon-button 
+      class="notification-close" 
+      (click)="closeNotification()"
+      aria-label="Close notification">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+</div>
