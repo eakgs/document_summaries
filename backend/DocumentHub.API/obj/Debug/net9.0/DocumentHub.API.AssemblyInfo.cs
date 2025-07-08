@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DocumentHub.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fc312f1f44e14bb6a6d0ee27dcd79b9b8fe05c07")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a5930f5d6363cbd1f513b3e461a9f4d4a4e21b5c")]
 [assembly: System.Reflection.AssemblyProductAttribute("DocumentHub.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DocumentHub.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
